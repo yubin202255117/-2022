@@ -1,0 +1,97 @@
+!pip install selenium
+!apt-get update
+!apt install chromium-chromedriver
+!cp /usr/lib/chromium-browser/chromedriver /usr/bin
+
+import sys
+sys.path.insert(0, '/usr/lib/chromium-browser/chromedriver')
+#웹드라이버 설정
+from selenium import webdriver
+
+chrome_options = webdriver.ChromeOptions()
+chrome_options.add_argument('--headless')
+chrome_options.add_argument('--no-sandbox')
+chrome_options.add_argument('--disable-dev-shm-usage')
+driver = webdriver.Chrome('chromedriver' ,options=chrome_options)
+
+import time
+import pandas as pd
+from selenium.common.exceptions import NoSuchElementException
+
+# 함수 만들기
+def get_movie_reviews(url, page_num=10) :
+    
+    wd = webdriver.Chrome('chromedriver', options=chrome_options)
+    # url과 페이지 번호 default를 10으로 하는 page_num을 parameter로 받아오기
+    wd.get(url)
+    
+    writer_list = []
+    review_list = []
+    date_list = []
+    
+    # page_num에 대한 반복문
+    for page_no in range(1, page_num+1) :
+        try : 
+            # *) 1페이지를 클릭했을 때 동작하는 것 == ul 태그
+            page_ul = wd.find_element_by_id('paging_point')
+            # Selenium 기능 : text 형태의 link를 찾는다.
+            # page_no에 대해서 str로 변환된 값을 link_text의 parameter로 보내주기
+            page_a = page_ul.find_element_by_link_text(str(page_no))
+            page_a.click()
+
+            # page_no을 누르면 새로고침 되어야 하는데,
+            #너무 빨리되면 새로고침되기 전에 접근되기 때문에 1초정도 지연해준다.
+            # (time을 import 해주기)
+            time.sleep(1)
+
+            # 1. 작성자 가져오기
+            # a 태그 안에 text로 들어가 있음 -> class 또는 writer-name으로 접근
+            writers = wd.find_elements_by_class_name('writer-name') # element's' 주의
+            # 작성자가 여러개이므로 list로 정리
+            writer_list += [writer.text for writer in writers]  # for문 위에 선언해주기
+
+    #         print(writer_list)
+
+            # 2. 드디어 수없이 봤던 찐리뷰..box-comment 가져오기 ㅡㅡ 후
+            reviews = wd.find_elements_by_class_name('box-comment')
+            review_list += [review.text for review in reviews]  # for문 위에 선언해주기
+
+            # 3. 날짜 가져오기
+            dates = wd.find_elements_by_class_name('day')
+            date_list += [date.text for date in dates]  # for문 위에 선언해주기
+
+            
+
+            # **) 다음페이지를 눌렀을 때
+            if page_no % 10 == 0 :
+                next_button = page_ul.find_element_by_class_name('btn-paging next')
+                next_button.click()
+                time.sleep(1)
+                
+        # 끝페이지까지 갔을 때의 예외처리로 Selenium의 NoSuchElementException을 import 해주고 오기
+        except NoSuchElementException :
+            break
+
+        
+        # DataFrame으로 보여주기 위해 pandas를 import 해주고 온다.
+    movie_review_df = pd.DataFrame({'날짜' : date_list,
+                                    '작성자' : writer_list,
+                                   '리뷰내용' : review_list})
+    return movie_review_df
+
+url = 'http://www.cgv.co.kr/movies/'
+wd = webdriver.Chrome('chromedriver', options=chrome_options)
+wd.get(url)
+
+movie_chart = wd.find_element_by_class_name('sect-movie-chart')
+contents = movie_chart.find_elements_by_class_name('box-contents')
+
+for content in contents :
+    link = content.find_element_by_tag_name('a').get_attribute('href')
+    title = content.find_element_by_class_name('title').text
+    percent = content.find_element_by_class_name('percent').text
+    info = content.find_element_by_class_name('txt-info').text
+    
+    print(title, percent, info, link)
+    
+    print(get_movie_reviews(link,2))
